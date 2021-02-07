@@ -10,7 +10,7 @@ from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_se
 from model.seq2seq import Module as Base
 from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
-
+from transformers import AutoModel, AutoConfig
 from PIL import Image
 
 import constants
@@ -28,8 +28,16 @@ class Module(Base):
         super().__init__(args, vocab)
 
         # encoder and self-attention
-        self.enc_goal = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
-        self.enc_instr = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
+        if args.use_bert:
+            self.bert = AutoModel.from_pretrained(args.bert_model)
+            self.max_length = args.max_length
+            bert_config = AutoConfig.from_pretrained(args.bert_model)
+
+            # update hidden dimension to bert dim
+            args.dhid = bert_config.hidden_size //2
+        else:
+            self.enc_goal = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
+            self.enc_instr = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
         self.enc_att_goal = vnn.SelfAttn(args.dhid*2)
         self.enc_att_instr = vnn.SelfAttn(args.dhid*2)
 
@@ -45,7 +53,7 @@ class Module(Base):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-
+        self.use_bert = args.use_bert
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
         self.lang_dropout = nn.Dropout(args.lang_dropout, inplace=True)
@@ -151,13 +159,31 @@ class Module(Base):
         # tensorization and padding
         for k, v in feat.items():
             if k in {'lang_goal', 'lang_instr'}:
-                # language embedding and padding
-                seqs = [torch.tensor(vv, device=device) for vv in v]
-                pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
-                seq_lengths = np.array(list(map(len, v)))
-                embed_seq = self.emb_word(pad_seq)
-                packed_input = pack_padded_sequence(embed_seq, seq_lengths, batch_first=True, enforce_sorted=False)
-                feat[k] = packed_input
+                if self.args.use_bert:
+                    batch_piece_idxs = []
+                    batch_attn_mask = []
+                    for piece_idxs in v:
+                        pad_num = self.max_length - len(piece_idxs)
+                        attn_mask = [1] * len(piece_idxs) + [0] * pad_num
+                        piece_idxs = piece_idxs + [0] * pad_num
+                        batch_piece_idxs.append(piece_idxs)
+                        batch_attn_mask.append(attn_mask)
+                    batch_piece_idxs = torch.tensor(batch_piece_idxs, device=device, dtype=torch.long)
+                    batch_attn_mask = torch.tensor(batch_attn_mask, device=device, dtype=torch.long)
+                    feat[k] = {
+                        'piece_idxs': batch_piece_idxs,
+                        'attn_mask': batch_attn_mask
+                    }
+                    # feat[k][] = batch_piece_idxs
+                    # feat[f'{k}_attn_mask'] = batch_attn_mask
+                else:
+                    # language embedding and padding
+                    seqs = [torch.tensor(vv, device=device) for vv in v]
+                    pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
+                    seq_lengths = np.array(list(map(len, v)))
+                    embed_seq = self.emb_word(pad_seq)
+                    packed_input = pack_padded_sequence(embed_seq, seq_lengths, batch_first=True, enforce_sorted=False)
+                    feat[k] = packed_input
             elif k in {'action_low_mask'}:
                 # mask padding
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float) for vv in v]
@@ -215,16 +241,27 @@ class Module(Base):
         '''
         encode goal+instr language
         '''
-        emb_lang = feat['lang_goal']
-        
-        self.lang_dropout(emb_lang.data)
-        
-        enc_lang, _ = self.enc_goal(emb_lang)
-        enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
-        
-        self.lang_dropout(enc_lang)
-        
-        cont_lang = self.enc_att_goal(enc_lang)
+        if self.use_bert:
+            
+            piece_idxs = feat['lang_goal']['piece_idxs']
+            attention_masks = feat['lang_goal']['attn_mask']
+            
+            all_bert_outputs = self.bert(piece_idxs, attention_mask=attention_masks)
+            enc_lang = all_bert_outputs[0]
+
+            cont_lang = self.enc_att_goal(enc_lang)
+        else:
+            # embedded vectors
+            emb_lang = feat['lang_goal']
+            
+            self.lang_dropout(emb_lang.data)
+            
+            enc_lang, _ = self.enc_goal(emb_lang)
+            enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
+            
+            self.lang_dropout(enc_lang)
+            
+            cont_lang = self.enc_att_goal(enc_lang)
 
         return cont_lang, enc_lang
 
@@ -232,16 +269,25 @@ class Module(Base):
         '''
         encode goal+instr language
         '''
-        emb_lang = feat['lang_instr']
-        
-        self.lang_dropout(emb_lang.data)
-        
-        enc_lang, _ = self.enc_instr(emb_lang)
-        enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
-        
-        self.lang_dropout(enc_lang)
-        
-        cont_lang = self.enc_att_instr(enc_lang)
+        if self.use_bert:
+            piece_idxs = feat['lang_instr']['piece_idxs']
+            attention_masks = feat['lang_instr']['attn_mask']
+            
+            all_bert_outputs = self.bert(piece_idxs, attention_mask=attention_masks)
+            enc_lang = all_bert_outputs[0]
+
+            cont_lang = self.enc_att_goal(enc_lang)
+        else:
+            emb_lang = feat['lang_instr']
+            
+            self.lang_dropout(emb_lang.data)
+            
+            enc_lang, _ = self.enc_instr(emb_lang)
+            enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
+            
+            self.lang_dropout(enc_lang)
+            
+            cont_lang = self.enc_att_instr(enc_lang)
 
         return cont_lang, enc_lang
 

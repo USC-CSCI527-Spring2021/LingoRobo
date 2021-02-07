@@ -63,10 +63,21 @@ if __name__ == '__main__':
     parser.add_argument('--fast_epoch', help='fast epoch during debugging', action='store_true')
     parser.add_argument('--dataset_fraction', help='use fraction of the dataset for debugging (0 indicates full size)', default=0, type=int)
     
+    # bert
+    parser.add_argument('--use_bert', help='use contextualized embeddings', action='store_true')
+    parser.add_argument('--bert_model', help='name of bert model', type=str)
+    parser.add_argument('--bert_lr', help='bert learning rate', type=float)
+    parser.add_argument('--max_length', help='bert max bpe token length', type=int)
+    
+
+
     # args and init
     args = parser.parse_args()
     args.dout = args.dout.format(**vars(args))
     torch.manual_seed(args.seed)
+
+    
+    
 
     # check if dataset has been preprocessed
     if not os.path.exists(os.path.join(args.data, "%s.vocab" % args.pp_folder)) and not args.preprocess:

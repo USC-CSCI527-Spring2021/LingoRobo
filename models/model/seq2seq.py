@@ -8,7 +8,7 @@ import numpy as np
 from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
-
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 not_perfect_list = [
     'pick_and_place_simple-SprayBottle-None-Toilet-422/trial_T20190909_124852_071149',
@@ -37,7 +37,9 @@ class Module(nn.Module):
         self.vocab = vocab
 
         # emb modules
-        self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
+        if not args.use_bert:
+            self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
+        
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens
@@ -94,7 +96,26 @@ class Module(nn.Module):
             json.dump(vars(args), f, indent=2)
 
         # optimizer
-        optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
+        if self.args.use_bert:
+            bert_weight_decay = 1e-05
+            param_groups = [
+                {
+                    'params': [p for n, p in self.named_parameters() if n.startswith('bert')],
+                    'lr': args.bert_lr, 'weight_decay': bert_weight_decay
+                },
+                {
+                    'params': [p for n, p in self.named_parameters() if not n.startswith('bert')],
+                    'lr': args.lr, 'weight_decay': bert_weight_decay
+                }
+            ]
+            optimizer = AdamW(params=param_groups)
+            batch_num = len(train)
+            warmup_epoch = 5
+            schedule = get_linear_schedule_with_warmup(optimizer,
+                                                    num_warmup_steps=batch_num*warmup_epoch,
+                                                    num_training_steps=batch_num*args.epoch)
+        else:
+            optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
 
         # display dout
         print("Saving to: %s" % self.args.dout)
@@ -122,6 +143,8 @@ class Module(nn.Module):
                 sum_loss = sum(loss.values())
                 sum_loss.backward()
                 optimizer.step()
+                if self.args.use_bert:
+                    schedule.step()
 
                 self.summary_writer.add_scalar('train/loss', sum_loss, train_iter)
                 sum_loss = sum_loss.detach().cpu()
@@ -337,7 +360,10 @@ class Module(nn.Module):
         save = torch.load(fsave)
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        if save['args'].use_bert:
+            optimizer = AdamW(model.parameters(), lr=1e-3)
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         optimizer.load_state_dict(save['optim'])
         return model, optimizer
 

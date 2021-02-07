@@ -7,7 +7,7 @@ import progressbar
 from vocab import Vocab
 from model.seq2seq import Module as model
 from gen.utils.py_util import remove_spaces_and_lower
-
+from transformers import AutoTokenizer
 
 class Dataset(object):
 
@@ -26,7 +26,9 @@ class Dataset(object):
             self.vocab = vocab
 
         self.word_seg = self.vocab['word'].word2index('<<seg>>', train=False)
-
+        if args.use_bert:
+            self.tokenizer = AutoTokenizer.from_pretrained(args.bert_model)        
+            self.max_length = args.max_length
 
     @staticmethod
     def numericalize(vocab, words, train=True):
@@ -88,17 +90,43 @@ class Dataset(object):
 
 
     def process_language(self, ex, traj, r_idx):
-        # tokenize language
-        traj['ann'] = {
-            'goal': revtok.tokenize(remove_spaces_and_lower(ex['turk_annotations']['anns'][r_idx]['task_desc'])) + ['<<goal>>'],
-            'instr': [revtok.tokenize(remove_spaces_and_lower(x)) for x in ex['turk_annotations']['anns'][r_idx]['high_descs']] + [['<<stop>>']],
-            'repeat_idx': r_idx
-        }
 
-        # numericalize language
+        
+        # tokenize language
         traj['num'] = {}
-        traj['num']['lang_goal'] = self.numericalize(self.vocab['word'], traj['ann']['goal'], train=True)
-        traj['num']['lang_instr'] = [self.numericalize(self.vocab['word'], x, train=True) for x in traj['ann']['instr']]
+
+        if self.args.use_bert:
+            traj['ann'] = {
+                'goal': "Goal: " + remove_spaces_and_lower(ex['turk_annotations']['anns'][r_idx]['task_desc']),
+                'instr': ["Instruction: " + remove_spaces_and_lower(x) for x in ex['turk_annotations']['anns'][r_idx]['high_descs']] + [['End.']],
+                'repeat_idx': r_idx
+            }
+            
+            traj['num']['lang_goal'] = self.tokenizer.encode(traj['ann']['goal'], 
+                                                        add_special_tokens=True,
+                                                        max_length=self.max_length,
+                                                        is_pretokenized=False, 
+                                                        truncation=True)
+            traj['num']['lang_instr'] = [self.tokenizer.encode(x, 
+                                                            add_special_tokens=True,
+                                                            max_length=self.max_length,
+                                                            is_pretokenized=False, 
+                                                            truncation=True) for x in traj['ann']['instr']]
+            
+        else:
+            
+            traj['ann'] = {
+                'goal': revtok.tokenize(remove_spaces_and_lower(ex['turk_annotations']['anns'][r_idx]['task_desc'])) + ['<<goal>>'],
+                'instr': [revtok.tokenize(remove_spaces_and_lower(x)) for x in ex['turk_annotations']['anns'][r_idx]['high_descs']] + [['<<stop>>']],
+                'repeat_idx': r_idx
+            }
+            traj['num']['lang_goal'] = self.numericalize(self.vocab['word'], traj['ann']['goal'], train=True)
+            traj['num']['lang_instr'] = [self.numericalize(self.vocab['word'], x, train=True) for x in traj['ann']['instr']]    
+            # print(len(ex['turk_annotations']['anns'][r_idx]['high_descs']), len(traj['ann']['instr']), len(traj['num']['lang_instr']))
+        
+        
+        
+        
 
 
     def process_actions(self, ex, traj):
@@ -167,7 +195,7 @@ class Dataset(object):
         lang_instr_seg_len = len(traj['num']['lang_instr'])
         seg_len_diff = action_low_seg_len - lang_instr_seg_len
         if seg_len_diff != 0:
-            assert (seg_len_diff == 1) # sometimes the alignment is off by one  ¯\_(ツ)_/¯
+            assert (seg_len_diff == 1), (len(traj['num']['action_low']), len(traj['num']['lang_instr'])) # sometimes the alignment is off by one  ¯\_(ツ)_/¯
             self.merge_last_two_low_actions(traj)
 
 
