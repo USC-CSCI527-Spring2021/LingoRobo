@@ -163,19 +163,20 @@ class Module(Base):
                     batch_piece_idxs = []
                     batch_attn_mask = []
                     for piece_idxs in v:
+                        
                         pad_num = self.max_length - len(piece_idxs)
                         attn_mask = [1] * len(piece_idxs) + [0] * pad_num
                         piece_idxs = piece_idxs + [0] * pad_num
                         batch_piece_idxs.append(piece_idxs)
                         batch_attn_mask.append(attn_mask)
+                        
                     batch_piece_idxs = torch.tensor(batch_piece_idxs, device=device, dtype=torch.long)
                     batch_attn_mask = torch.tensor(batch_attn_mask, device=device, dtype=torch.long)
                     feat[k] = {
                         'piece_idxs': batch_piece_idxs,
                         'attn_mask': batch_attn_mask
                     }
-                    # feat[k][] = batch_piece_idxs
-                    # feat[f'{k}_attn_mask'] = batch_attn_mask
+                    
                 else:
                     # language embedding and padding
                     seqs = [torch.tensor(vv, device=device) for vv in v]
@@ -210,9 +211,12 @@ class Module(Base):
         '''
         append segmented instr language and low-level actions into single sequences
         '''
-        is_serialized = not isinstance(feat['num']['lang_instr'][0], list)
+        # TODO: not sure if using action_low to detect serialize is correct or not
+        is_serialized = not isinstance(feat['num']['action_low'][0], list)
         if not is_serialized:
-            feat['num']['lang_instr'] = [word for desc in feat['num']['lang_instr'] for word in desc]
+            # each instruction is either encoded separately when using bert, or already serialized
+            if not self.args.use_bert:
+                feat['num']['lang_instr'] = [word for desc in feat['num']['lang_instr'] for word in desc]
             if not self.test_mode:
                 feat['num']['action_low'] = [a for a_group in feat['num']['action_low'] for a in a_group]
 

@@ -109,7 +109,7 @@ class Module(nn.Module):
                 }
             ]
             optimizer = AdamW(params=param_groups)
-            batch_num = len(train)
+            batch_num = len(train) // args.batch
             warmup_epoch = 5
             schedule = get_linear_schedule_with_warmup(optimizer,
                                                     num_warmup_steps=batch_num*warmup_epoch,
