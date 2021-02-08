@@ -64,6 +64,14 @@ python models/train/train_seq2seq.py --dout exp/moca --gpu --save_every_epoch
 ```
 **Note**: The option, `--save_every_epoch`, saves weights for all epochs and therefore could take a lot of space.
 
+### Fine-tuning LM
+`--use-bert` must be passed to the argument. The name of the LM (e.g. `bert-base-uncased`, `roberta-base`) can be passed using `--bert_model`. `--max_length` refers to the max sub-tokens for each instruction and goal. Sequences longer than `--max_length` will be truncated. `--bert_lr` refers to the learning rate for fine-tuning LM. Usually, it is beneficial to set LM learning rate to be smaller number than the learning rate for training the other component of the model. An example of fine-tuning LM.j
+
+```
+python models/train/train_seq2seq.py --data data/json_feat_2.1.0 --model seq2seq_im_mask --dout exp/model:{model},name:pm_and_subgoals_02_bert_base1e-05  --splits data/splits/oct21.json --gpu 3 --batch 2 --pm_aux_loss_wt 0.2  --subgoal_aux_loss_wt 0.2  --pp_folder pp_bert --use_bert --bert_model bert-base-uncased --bert_lr  1e-05 --max_length 512
+```
+
+
 
 ## Evaluation
 ### Task Evaluation
