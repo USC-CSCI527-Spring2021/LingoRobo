@@ -107,11 +107,12 @@ class Dataset(object):
                                                         max_length=self.max_length,
                                                         is_pretokenized=False, 
                                                         truncation=True)
-            traj['num']['lang_instr'] = [self.tokenizer.encode(x, 
+            traj['num']['lang_instr'] = self.tokenizer.encode([word for instr in traj['ann']['instr'] for word in instr ], 
                                                             add_special_tokens=True,
                                                             max_length=self.max_length,
                                                             is_pretokenized=False, 
-                                                            truncation=True) for x in traj['ann']['instr']]
+                                                            truncation=True) 
+            
             
         else:
             
@@ -195,7 +196,9 @@ class Dataset(object):
         lang_instr_seg_len = len(traj['num']['lang_instr'])
         seg_len_diff = action_low_seg_len - lang_instr_seg_len
         if seg_len_diff != 0:
-            assert (seg_len_diff == 1), (len(traj['num']['action_low']), len(traj['num']['lang_instr'])) # sometimes the alignment is off by one  ¯\_(ツ)_/¯
+            # if use bert, instructions are flattened alreadyy
+            if not self.args.use_bert:
+                assert (seg_len_diff == 1), (len(traj['num']['action_low']), len(traj['num']['lang_instr'])) # sometimes the alignment is off by one  ¯\_(ツ)_/¯
             self.merge_last_two_low_actions(traj)
 
 
