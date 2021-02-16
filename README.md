@@ -42,6 +42,18 @@ $ sh download_data.sh
 ```
 **Note**: The downloaded data includes expert trajectories with both original and color-swapped frames.
 
+### ConceptNet
+The download and pre-processing scripts are adapted from the [KagNet repo](https://github.com/INK-USC/KagNet/tree/master/conceptnet).
+```
+mkdir conceptnet
+cd conceptnet
+wget https://s3.amazonaws.com/conceptnet/downloads/2018/edges/conceptnet-assertions-5.6.0.csv.gz
+gzip -d conceptnet-assertions-5.6.0.csv.gz
+python extract_cpnet.py
+```
+
+
+
 ### Pretrained Model
 We provide our pretrained weight used for the experiments in the paper and the leaderboard submission.
 To download the pretrained weight of MOCA, use the command below.
