@@ -1,48 +1,54 @@
 import sys
 import json
 import random
+import grounding_concepts
+import os
+import spacy
+import configparser
+from spacy.matcher import Matcher
+from tqdm import tqdm
+from joblib import Parallel, delayed
 
-path_csqa_train = "../datasets/csqa_new/train_rand_split.jsonl.statements"
-path_csqa_dev = "../datasets/csqa_new/dev_rand_split.jsonl.statements"
-path_swag_train = "../datasets/swagaf/data/train.statements"
-path_swag_val = "../datasets/swagaf/data/val.statements"
-
-PATH = path_csqa_train
-NUM_BATCHES = 100
-
-def generate_bash():
-    PATH = sys.argv[2]
-    with open("cmd_lucy.sh", 'w') as f:
-        for i in range(0,50):
-            f.write("CUDA_VISIBLE_DEVICES=NONE python grounding_concepts.py %s %d &\n" % (PATH, i))
-        f.write('wait')
-
-    with open("cmd_ron.sh", 'w') as f:
-        for i in range(50,80):
-            f.write("CUDA_VISIBLE_DEVICES=NONE python grounding_concepts.py %s %d &\n" % (PATH, i))
-        f.write('wait')
-
-    with open("cmd_molly.sh", 'w') as f:
-        for i in range(80,100):
-            f.write("CUDA_VISIBLE_DEVICES=NONE python grounding_concepts.py %s %d &\n" % (PATH, i))
-        f.write('wait')
-
-def combine():
-    final_json = []
-    PATH = sys.argv[2]
-    for i in range(NUM_BATCHES):
-        with open(PATH + ".%d.mcp"%i) as fp:
-            tmp_list = json.load(fp)
-        final_json += tmp_list
-    import jsbeautifier
-    opts = jsbeautifier.default_options()
-    opts.indent_size = 2
+splits_data = '../data/splits/oct21.json'
+data_path= '../data/json_feat_2.1.0'
 
 
-    with open(PATH + ".mcp", 'w') as fp:
-        fp.write(jsbeautifier.beautify(json.dumps(final_json), opts))
+
+
+def load_matcher(nlp):
+    config = configparser.ConfigParser()
+    config.read("paths.cfg")
+    with open(config["paths"]["matcher_patterns"], "r", encoding="utf8") as f:
+        all_patterns = json.load(f)
+
+    matcher = Matcher(nlp.vocab)
+    for concept, pattern in tqdm(all_patterns.items(), desc="Adding patterns to Matcher."):
+        matcher.add(concept, [pattern])
+        
+    return matcher
+
+def process_splits():
+    with open(splits_data, 'r') as f:
+        splits = json.loads(f.read())
+
+    for k, sub_dir in splits.items():
+        
+        for task in tqdm(sub_dir):
+            # load json file
+            json_path = os.path.join(data_path, k, task['task'], 'traj_data.json')
+            grounding_concepts.process(json_path, nlp, matcher)
+
+        # the below process somehow does not speed up the process on pluslab idk why
+
+        # parallel computing to speed up the process
+        # parallel = Parallel(10, backend="threading", verbose=0)
+            
+        
+        # parallel(delayed(grounding_concepts.process)(os.path.join(data_path, k, task['task'], 'traj_data.json'), nlp, matcher) for task in tqdm(sub_dir))
 
 
 if __name__ == '__main__':
-    import sys
-    globals()[sys.argv[1]]()
+    nlp = spacy.load('en_core_web_sm', disable=['ner', 'parser', 'textcat'])
+    nlp.add_pipe('sentencizer')
+    matcher = load_matcher(nlp)
+    process_splits()
