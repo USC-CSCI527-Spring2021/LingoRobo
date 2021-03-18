@@ -15,7 +15,8 @@ nltk_stopwords = nltk.corpus.stopwords.words('english')
 def create_pattern(nlp, doc):
     pronoun_list = set(["my", "you", "it", "its", "your","i","he", "she","his","her","they","them","their","our","we"])
     # Filtering concepts consisting of all stop words and longer than four words.
-    if len(doc) >= 5 or doc[0].text in pronoun_list or doc[-1].text in pronoun_list or all([(token.text in nltk_stopwords or token.lemma_ in nltk_stopwords) for token in doc]):  #
+    # Also filter words that are in ['VERB','AUX','ADP','NUM','SYM']
+    if len(doc) >= 5 or doc[0].pos_ in ['VERB','AUX','ADP','NUM','SYM'] or doc[0].text in pronoun_list or doc[-1].text in pronoun_list or all([(token.text in nltk_stopwords or token.lemma_ in nltk_stopwords) for token in doc]):  #
         return None  # ignore this concept as pattern
 
     pattern = []

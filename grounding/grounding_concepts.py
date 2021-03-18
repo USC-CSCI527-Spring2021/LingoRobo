@@ -26,8 +26,23 @@ def load_matcher(nlp):
     with open(config["paths"]["matcher_patterns"], "r", encoding="utf8") as f:
         all_patterns = json.load(f)
 
+    # filter patterns such that the same pattern can only be mapped to one concept
     matcher = Matcher(nlp.vocab)
-    for concept, pattern in tqdm(all_patterns.items(), desc="Adding patterns to Matcher."):
+
+    filtered_patterns = {}
+
+    # down sample the match patters to speed up processing
+    for concept, pattern in all_patterns.items():
+        flattened_pattern = tuple((prefix, tok) for word in pattern for prefix, tok in word.items())
+
+        if flattened_pattern not in filtered_patterns:
+            filtered_patterns[flattened_pattern] = concept
+        # update the match concept if the current one is shorter
+        elif len(concept) < len(filtered_patterns[flattened_pattern]):
+            filtered_patterns[flattened_pattern] = concept
+    
+    for concept, flattened_pattern in tqdm(filtered_patterns.items(), desc="Adding patterns to Matcher."):
+        pattern = [{word[0]:word[1]} for word in flattened_pattern ]
         matcher.add(concept, [pattern])
     return matcher
 
@@ -48,6 +63,9 @@ def ground_mentioned_concepts(nlp, matcher, s):
 
     res = []
     span_to_concepts = {}
+
+    # remove duplicate and overlapping spans 
+    matches = spacy.util.filter_spans(matches)
 
     for spacy_span in matches:
 
