@@ -1,19 +1,12 @@
-# MOCA
-<a href="http://arxiv.org/abs/2012.03208"> <b> MOCA: A Modular Object-Centric Approach for Interactive Instruction Following </b> </a>
-<br>
-<a href="https://kunalmessi10.github.io/"> Kunal Pratap Singh* </a>,
-<a href="https://www.linkedin.com/in/suvaansh-bhambri-1784bab7/"> Suvaansh Bhambri* </a>,
-<a href="https://bhkim94.github.io/"> Byeonghwi Kim* </a>,
-<a href="http://roozbehm.info/"> Roozbeh Mottaghi </a>,
-<a href="http://ppolon.github.io/"> Jonghyun Choi </a>
+# LingoRobo
 
-<b> MOCA </b> (<b>M</b>odular <b>O</b>bject-<b>C</b>entric <b>A</b>pproach) is a modular architecture that decouples a task into visual perception and action policy.
-The action policy module (APM) is responsible for sequential action prediction, whereas the visual perception module (VPM) generates pixel-wise interaction mask for the objects of interest for manipulation.
-MOCA addresses long-horizon instruction following tasks based on egocentric RGB observations and natural language instructions on the <a href="https://github.com/askforalfred/alfred">ALFRED</a> benchmark.
+Authors: 
+* [Kung-Hsiang Steeve Huang](http://khuangaf.github.io/)*
+* [Shikhar Singh](https://www.linkedin.com/in/shikhar-singh-730910a7).*
 
-<img src="media/moca.png" alt="MOCA">
+*equal contribution
 
-
+Source code for **commonsesne knowledge incorporation** please navigate to branch [know_inject](https://github.com/USC-CSCI527-Spring2021/LingoRobo/tree/know_inject).
 ## Environment
 ### Clone repository
 ```
@@ -87,48 +80,4 @@ If you want to evaluate our pretrained model saved in `exp/pretrained/pretrained
 python models/eval/eval_seq2seq.py --model_path "exp/pretrained/pretrained.pth" --eval_split valid_seen --gpu --num_threads 4
 ```
 
-### Subgoal Evaluation
-To evaluate MOCA for subgoals, run `eval_seq2seq.py` with with the option `--subgoals <subgoals>`. <br>
-The option takes `all` for all subgoals and `GotoLocation`, `PickupObject`, `PutObject`, `CoolObject`, `HeatObject`, `CleanObject`, `SliceObject`, and `ToggleObject` for each subgoal.
-The option can take multiple subgoals.
-For more details, refer to <a href="https://github.com/askforalfred/alfred/tree/master/models">ALFRED</a>.
-```
-python models/eval/eval_seq2seq.py --data <path_to_dataset> --model models.model.seq2seq_im_mask --model_path <path_to_weight> --eval_split <eval_split> --gpu --num_threads <thread_num> --subgoals <subgoals>
-```
-**Note**: All hyperparameters used for the experiments in the paper are set as default.
 
-If you want to evaluate our pretrained model saved in `exp/pretrained/pretrained.pth` in the `seen` validation for all subgoals, you may use the command below.
-```
-python models/eval/eval_seq2seq.py --model_path "exp/pretrained/pretrained.pth" --eval_split valid_seen --gpu --num_threads 4 --subgoals all
-```
-
-### Expected Validation Result
-| Model      | Seen SR(%)                  | Seen GC (%)                 | Unseen SR (%)           | Unseen GC (%)             |
-|:----------:|:---------------------------:|:---------------------------:|:-----------------------:|:-------------------------:|
-| Reported   | 19.15        (13.60)        | 28.50 (22.30)               | 3.78 (2.00)             | 13.40 (8.30)              |
-| Reproduced | 18.66\~19.27 (12.78\~13.63) | 27.79\~28.64 (21.50\~22.14) | 3.65\~3.78 (1.94\~1.99) | 13.40\~13.77 (8.22\~8.69) |
-
-**Note**: "Reproduced" denotes the expected success rates of the pretrained model that we provide.
-
-
-## Hardware 
-Trained and Tested on:
-- **GPU** - GTX 2080 Ti (11GB)
-- **CPU** - Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz
-- **RAM** - 32GB
-- **OS** - Ubuntu 18.04
-
-
-## License
-MIT License
-
-
-## Citation
-```
-@article{singh2020moca,
-  title={MOCA: A Modular Object-Centric Approach for Interactive Instruction Following},
-  author={Singh, Kunal Pratap and Bhambri, Suvaansh and Kim, Byeonghwi and Mottaghi, Roozbeh and Choi, Jonghyun},
-  journal={arXiv preprint arXiv:2012.03208},
-  year={2020}
-}
-```
