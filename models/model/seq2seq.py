@@ -42,6 +42,9 @@ class Module(nn.Module):
         
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
+        if args.know_inject:
+            self.emb_concept = nn.Embedding(len(vocab['concept']), args.demb)
+            
         # end tokens
         self.stop_token = self.vocab['action_low'].word2index("<<stop>>", train=False)
         self.seg_token = self.vocab['action_low'].word2index("<<seg>>", train=False)

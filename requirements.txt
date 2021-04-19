@@ -8,7 +8,9 @@ vocab
 revtok
 Pillow
 matplotlib
-torch==1.5.0
+torch==1.6.0
 torchvision==0.6.0
 tensorboardX==1.8
 ai2thor==2.1.0
+spacy==3.0.3
+nltk==3.5

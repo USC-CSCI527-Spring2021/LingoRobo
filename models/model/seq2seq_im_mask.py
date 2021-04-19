@@ -38,8 +38,14 @@ class Module(Base):
         else:
             self.enc_goal = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
             self.enc_instr = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
+
         self.enc_att_goal = vnn.SelfAttn(args.dhid*2)
         self.enc_att_instr = vnn.SelfAttn(args.dhid*2)
+        
+        if args.know_inject:
+            from torch_geometric.nn import GCNConv
+            self.gcn_1 = GCNConv(in_channels=args.demb, out_channels=args.dhid)
+            self.gcn_2 = GCNConv(in_channels=args.dhid, out_channels=args.dhid * 2)
 
         # subgoal monitoring
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt > 0 or self.args.subgoal_aux_loss_wt > 0)
@@ -54,6 +60,7 @@ class Module(Base):
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
         self.use_bert = args.use_bert
+        self.know_inject = args.know_inject
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
         self.lang_dropout = nn.Dropout(args.lang_dropout, inplace=True)
@@ -122,6 +129,11 @@ class Module(Base):
             # append goal + instr
             feat['lang_goal'].append(lang_goal)
             feat['lang_instr'].append(lang_instr)
+
+            
+            # append nowlwedge
+            if 'sub_graph' in ex['num']:
+                feat['sub_graph'].append(ex['num']['sub_graph'])
 
             #########
             # outputs
@@ -198,6 +210,33 @@ class Module(Base):
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 feat[k] = pad_seq
+            elif k in {'sub_graph'}:
+                batch_nodes = []
+                batch_edge_index = []
+                for vv in v:
+                    nodes = list(set([concept for path in vv for concept in path]))
+                    nodes2idx = {node: idx for idx, node in enumerate(nodes)}
+
+                    edge_index = []
+                    for path in vv:
+                        for source, target in zip(path[:-1], path[1:]):
+                            
+                            edge_index.append([nodes2idx[source], nodes2idx[target]]) 
+
+                    if len(edge_index) > 0:
+                        edge_index = np.vstack(edge_index).T
+                        edge_index = torch.tensor(edge_index, device=device, dtype=torch.long)
+                    else:
+                        edge_index = torch.tensor(edge_index, device=device, dtype=torch.long).reshape(2,-1)
+                    nodes = torch.tensor(nodes, device=device, dtype=torch.long)
+                    batch_nodes.append(self.emb_concept(nodes))
+                    batch_edge_index.append(edge_index)
+                feat[k] = {
+                    'nodes': batch_nodes,
+                    'edge_index': batch_edge_index
+                }
+                
+
             else:
                 # default: tensorize and pad sequence
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float if ('frames' in k) else torch.long) for vv in v]
@@ -233,6 +272,7 @@ class Module(Base):
     def forward(self, feat, max_decode=300):
         cont_lang_goal, enc_lang_goal = self.encode_lang(feat)
         cont_lang_instr, enc_lang_instr = self.encode_lang_instr(feat)
+        
         state_0_goal = cont_lang_goal, torch.zeros_like(cont_lang_goal)
         state_0_instr = cont_lang_instr, torch.zeros_like(cont_lang_instr)
         frames = self.vis_dropout(feat['frames'])
@@ -240,7 +280,7 @@ class Module(Base):
         feat.update(res)
         return feat
 
-
+    
     def encode_lang(self, feat):
         '''
         encode goal+instr language
@@ -266,6 +306,7 @@ class Module(Base):
             self.lang_dropout(enc_lang)
             
             cont_lang = self.enc_att_goal(enc_lang)
+        
 
         return cont_lang, enc_lang
 
@@ -292,6 +333,19 @@ class Module(Base):
             self.lang_dropout(enc_lang)
             
             cont_lang = self.enc_att_instr(enc_lang)
+
+        # inject knowledge
+        if self.know_inject:
+            
+            for batch_idx, (node_embs, edge_index) in enumerate(zip(feat['sub_graph']['nodes'], feat['sub_graph']['edge_index'])):
+                
+                gcn_output1 = self.gcn_1(node_embs, edge_index)
+                gcn_output1 = torch.nn.ReLU()(gcn_output1)
+                gcn_output2 = self.gcn_2(gcn_output1, edge_index)
+                gcn_output2 = torch.nn.ReLU()(gcn_output2)
+                
+                # for now, I'll just take avg of it
+                cont_lang[batch_idx] = cont_lang[batch_idx] + gcn_output2.mean(dim=0)
 
         return cont_lang, enc_lang
 

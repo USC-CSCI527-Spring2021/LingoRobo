@@ -21,6 +21,7 @@ class Dataset(object):
                 'word': Vocab(['<<pad>>', '<<seg>>', '<<goal>>']),
                 'action_low': Vocab(['<<pad>>', '<<seg>>', '<<stop>>']),
                 'action_high': Vocab(['<<pad>>', '<<seg>>', '<<stop>>']),
+                'concept': Vocab(), 
             }
         else:
             self.vocab = vocab
@@ -54,6 +55,12 @@ class Dataset(object):
                 json_path = os.path.join(self.args.data, k, task['task'], 'traj_data.json')
                 with open(json_path) as f:
                     ex = json.load(f)
+                
+                grounded_result = None
+                if self.args.know_inject:
+                    with open(json_path + '.sg', 'r') as f:
+                        grounded_result = json.load(f)
+                
 
                 # copy trajectory
                 r_idx = task['repeat_idx'] # repeat_idx is the index of the annotation for each trajectory
@@ -64,11 +71,13 @@ class Dataset(object):
                 traj['split'] = k
 
                 # numericalize language
-                self.process_language(ex, traj, r_idx)
+                self.process_language(ex, traj, r_idx, grounded_result=grounded_result)
 
                 # numericalize actions for train/valid splits
                 if 'test' not in k: # expert actions are not available for the test set
                     self.process_actions(ex, traj)
+
+                
 
                 # check if preprocessing storage folder exists
                 preprocessed_folder = os.path.join(self.args.data, task['task'], self.args.pp_folder)
@@ -88,8 +97,9 @@ class Dataset(object):
         vocab_data_path = os.path.join(self.args.data, '%s.vocab' % self.args.pp_folder)
         torch.save(self.vocab, vocab_data_path)
 
+    
 
-    def process_language(self, ex, traj, r_idx):
+    def process_language(self, ex, traj, r_idx, grounded_result=None):
 
         
         # tokenize language
@@ -125,7 +135,9 @@ class Dataset(object):
             traj['num']['lang_instr'] = [self.numericalize(self.vocab['word'], x, train=True) for x in traj['ann']['instr']]    
             # print(len(ex['turk_annotations']['anns'][r_idx]['high_descs']), len(traj['ann']['instr']), len(traj['num']['lang_instr']))
         
-        
+        if grounded_result is not None:
+            # convert concept to idx
+            traj['num']['sub_graph'] = [self.numericalize(self.vocab['concept'], path, train=True)  for path in grounded_result[r_idx]]
         
         
 

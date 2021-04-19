@@ -31,6 +31,7 @@ $ pip install --upgrade pip
 $ pip install -r requirements.txt
 ```
 
+To install `torch-geometric` for GCN, please follow: https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html.
 
 ## Download
 ### Dataset
@@ -52,6 +53,22 @@ gzip -d conceptnet-assertions-5.6.0.csv.gz
 python extract_cpnet.py
 ```
 
+#### Grounding
+Before grounding, first, we need to create patterns to match mentions of text from instructions and goal to KG concept. 
+
+```
+cd grounding
+python create_patterns.py
+```
+
+This will generates a `matcher_patterns.json` file with key being the concept and values being the lemma and patterns.
+
+Next, we can start grounding:
+
+```
+python batched_grounding.py
+```
+The script will loop over all `traj_data.json` in `data/json_feat_2.1.0` and create grounded annotation ended with `traj_data.json.mcp`
 
 
 ### Pretrained Model
